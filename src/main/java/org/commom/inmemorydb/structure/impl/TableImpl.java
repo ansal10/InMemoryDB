@@ -166,7 +166,6 @@ public class TableImpl implements Table {
         }
     }
 
-    @Override
     public Column getColumnByName(String columnName) throws MyException {
         for(Column column:columnList){
             if(column.getColumnName().equalsIgnoreCase(columnName))
@@ -177,8 +176,9 @@ public class TableImpl implements Table {
     }
 
     @Override
-    public Collection<List<Object>> joinTable(Table table, String columnFormerTable, String columnLaterTable) throws MyException {
+    public Collection<List<Object>> joinTable(Table t, String columnFormerTable, String columnLaterTable) throws MyException {
 
+        TableImpl table = (TableImpl) t;
         List<String> formerColumnNames = new LinkedList<String>();
         List<String> latterColumnNames = new LinkedList<String>();
 
