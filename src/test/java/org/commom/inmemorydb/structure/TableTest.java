@@ -141,4 +141,50 @@ public class TableTest {
             t[i].join();
         }
     }
+
+    @Test
+    public void multiOperationOnSingleTable() throws MyException, InterruptedException {
+        final String []args={"name","roll","marks","dob","col1","col2","col3","col4"};
+        final Table tab = new TableImpl(null, args);
+        for(int i = 0 ; i < 100000 ; i++) {
+            tab.addRow("arg1",101,43.76,new Date(),123,"213123","12",true);
+        }
+        Thread []t = new Thread[8];
+
+        for (int i = 0 ; i < 8 ; i++){
+            t[i] = new Thread( new Parallen(tab, i , args));
+        }
+        for (int i = 0 ; i < 8 ; i++){
+            t[i].start();
+        }
+        for (int i = 0 ; i < 8 ; i++){
+            t[i].join();
+        }
+
+
+    }
+
+    class Parallen implements Runnable {
+
+        Table tab;
+        int i;
+        String []args;
+        Parallen(Table t , int x , String []args){
+            this.tab=t;
+            this.i=x;
+            this.args=args;
+        }
+        @Override
+        public void run() {
+            try {
+                if(i%2==0)
+                tab.createIndex(args[i]);
+                else
+                tab.deleteIndex(args[i-1]);
+
+            } catch (MyException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 }

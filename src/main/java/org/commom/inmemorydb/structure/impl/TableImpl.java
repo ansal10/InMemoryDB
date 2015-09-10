@@ -6,7 +6,6 @@ import org.commom.inmemorydb.structure.Row;
 import org.commom.inmemorydb.structure.Table;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by amd on 9/9/15.
@@ -20,24 +19,24 @@ public class TableImpl implements Table {
     private static final Object INDEXING_DOESNOT_EXIST = "Indexing doesnot exist for column : ";
     private static final String DEFAULT_INDEXING_CANNOT_REMOVE = "Cannot remove default indexing for column : ";
     private static final String DUPLICATE_ID_VALUE_NOT_ALLOWED = "ID Value already exist for other column ";
+
     private final int INDEX_POSITION = 0;
     private final String INDEX_COLUMN = "id";
-
 
     private int id=0;
 
     String tableName;
     List<Column> columnList;
 
-    ConcurrentHashMap<Integer, Row> rows;
-    ConcurrentHashMap<String , ConcurrentHashMap> indexMap;
+    HashMap<Integer, Row> rows;
+    HashMap<String , HashMap> indexMap;
+
 
     public TableImpl(String tableName, String... columns) throws MyException {
         this.tableName = tableName;
         this.columnList = new LinkedList<Column>();
-        this.rows = new ConcurrentHashMap<Integer, Row>();
-        this.indexMap = new ConcurrentHashMap<String, ConcurrentHashMap>();
-
+        this.rows = new HashMap<Integer, Row>();
+        this.indexMap = new HashMap<String, HashMap>();
 
         int position = 0;
         columnList.add(new ColumnImpl(INDEX_COLUMN,"Integer", null, false, true, position));
@@ -58,28 +57,31 @@ public class TableImpl implements Table {
     @Override
     public Table addRow(Object... args) throws MyException {
 
-        if( (args.length+1) != getNumberOfColumn())
-            throw new MyException(COLUMN_MISMATCH);
+        synchronized(this){
+            if( (args.length+1) != getNumberOfColumn())
+                throw new MyException(COLUMN_MISMATCH);
 
-        int id = incrementID();
-        RowImpl row = new RowImpl(columnList);
-        List<Object> object = new LinkedList<Object>();
-        object.add(id);
+            int id = incrementID();
+            RowImpl row = new RowImpl(columnList);
+            List<Object> object = new LinkedList<Object>();
+            object.add(id);
 
-        for(int i = 0 ; i < args.length ; i++)
-            object.add(args[i]);
+            for(int i = 0 ; i < args.length ; i++)
+                object.add(args[i]);
 
-        row.addRow(object);
-        this.rows.put(id, row);
-        applyIndexing(id);
-        return this;
+            row.addRow(object);
+            this.rows.put(id, row);
+            applyIndexing(id);
+            return this;
+        }
     }
 
     private Table addNewRow( Row row) throws MyException {
 
-        List<Object> object = row.getAllColumnValue().subList(INDEX_POSITION+1, row.getColumnList().size());
-        return addRow(object.toArray());
-
+        synchronized (this) {
+            List<Object> object = row.getAllColumnValue().subList(INDEX_POSITION + 1, row.getColumnList().size());
+            return addRow(object.toArray());
+        }
     }
 
     @Override
@@ -96,7 +98,7 @@ public class TableImpl implements Table {
 
         // if indexing is present on column
         if(indexMap.get(columnName)!=null){
-            ConcurrentHashMap map = indexMap.get(columnName);
+            HashMap map = indexMap.get(columnName);
              ids = (List<Integer>) map.getOrDefault(value, new LinkedList<Integer>());
 
         }
@@ -120,7 +122,7 @@ public class TableImpl implements Table {
         return retVal;
     }
 
-    private synchronized int incrementID(){
+    private int incrementID(){
         id++;
         return id;
     }
@@ -188,35 +190,39 @@ public class TableImpl implements Table {
 
     @Override
     public void createIndex(String columnName) throws MyException {
-        ColumnImpl column = (ColumnImpl) getColumnByName(columnName);
-        if(column.getIsIndexed())
-            throw new MyException(INDEXING_ALREADY_EXIST+columnName);
+        synchronized (this) {
+            ColumnImpl column = (ColumnImpl) getColumnByName(columnName);
+            if (column.getIsIndexed())
+                throw new MyException(INDEXING_ALREADY_EXIST + columnName);
 
-        if (column.getColumnName().equalsIgnoreCase(columnName) && !column.getIsIndexed()){
-            int position = column.getPosition();
+            if (column.getColumnName().equalsIgnoreCase(columnName) && !column.getIsIndexed()) {
+                int position = column.getPosition();
 
-            ConcurrentHashMap<Object, List<Integer>> map = new ConcurrentHashMap<Object, List<Integer>>();
+                HashMap<Object, List<Integer>> map = new HashMap<Object, List<Integer>>();
 
-            for(Row row : rows.values()){
-                Object key = row.getColumnValue(position);
-                List<Integer> value = map.getOrDefault(key, new LinkedList<Integer>());
-                value.add((Integer) row.getColumnValue(INDEX_POSITION));
-                map.put(key, value);
+                for (Row row : rows.values()) {
+                    Object key = row.getColumnValue(position);
+                    List<Integer> value = map.getOrDefault(key, new LinkedList<Integer>());
+                    value.add((Integer) row.getColumnValue(INDEX_POSITION));
+                    map.put(key, value);
+                }
+                indexMap.put(column.getColumnName(), map);
+                column.setIsIndexed(true);
             }
-            indexMap.put(column.getColumnName(), map);
-            column.setIsIndexed(true);
         }
     }
 
     @Override
     public void deleteIndex(String columnName) throws MyException {
-        ColumnImpl column = (ColumnImpl) getColumnByName(columnName);
-        if (!column.getIsIndexed())
-            throw new MyException(INDEXING_DOESNOT_EXIST + columnName);
-        if (column.getColumnName().equalsIgnoreCase(INDEX_COLUMN))
-            throw new MyException(DEFAULT_INDEXING_CANNOT_REMOVE + columnName);
-        indexMap.remove(column.getColumnName());
-        column.setIsIndexed(false);
+        synchronized (this) {
+            ColumnImpl column = (ColumnImpl) getColumnByName(columnName);
+            if (!column.getIsIndexed())
+                throw new MyException(INDEXING_DOESNOT_EXIST + columnName);
+            if (column.getColumnName().equalsIgnoreCase(INDEX_COLUMN))
+                throw new MyException(DEFAULT_INDEXING_CANNOT_REMOVE + columnName);
+            indexMap.remove(column.getColumnName());
+            column.setIsIndexed(false);
+        }
     }
 
     private void applyIndexing(int id) throws MyException {
@@ -225,7 +231,7 @@ public class TableImpl implements Table {
 
         for(Column column:columnList){
             if(column.getIsIndexed()){
-                ConcurrentHashMap map = indexMap.get(column.getColumnName());
+                HashMap map = indexMap.get(column.getColumnName());
                 Object key = row.getColumnValue(column.getPosition());
                 List<Integer> value = (List<Integer>) map.getOrDefault(key , new LinkedList<Integer>());
                 value.add(id);
@@ -257,7 +263,7 @@ public class TableImpl implements Table {
         return new LinkedList<Row>(this.rows.values());
     }
 
-    private ConcurrentHashMap getRows(){
+    private HashMap getRows(){
         return this.rows;
     }
 
