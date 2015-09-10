@@ -111,6 +111,20 @@ public class TableTest {
     }
 
     @Test
+    public void testGetbyColumnName() throws MyException {
+        Table student = new TableImpl("Student", "name", "roll","marks");
+        student.addRow("Spyke","101",43.3);
+        student.addRow("Kyle","102",44.5);
+        student.addRow("Johnson", "103",65.6);
+        student.addRow("Johny", "103",43.3);
+
+        for(Row row : student.selectRowQuery("roll","103").getSelectedRows()){
+            System.out.println("Name = "+row.getColumnValue("roll"));
+        }
+
+    }
+
+    @Test
     public void tableCreateWithMultiThread() throws MyException, InterruptedException {
         Thread []t = new Thread[100];
 
